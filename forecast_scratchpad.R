@@ -169,15 +169,24 @@ autoplot(fc8) + ylab("Quotes") +
 
 
 #///////////////////////////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////////////////////////
 
 
 # time series cross validation ####
 
+# this takes a series of all one-step-ahead forecasts and returns the error for each prediction
+# note the initial arg specifies how many initial obs to use for building the first model (these then aren't used for CV error)
+# h arg is horizon, allowing comparing prediction horizons of 1:h
+# window arg specifies width for a rolling model-training window
+# https://otexts.com/fpp2/accuracy.html
+
 goog200
 goog200 %>% str()
 
-e <- tsCV(goog200, forecastfunction = rwf, drift=TRUE, h=1, xreg = NULL)
+e <- tsCV(goog200, forecastfunction = rwf, drift=TRUE, h=5, xreg = NULL, initial = 10, window = 12)
 e
+e %>% str()
 
 # inspect time series cross-validation error
 # as expected, the cv error is greater because the model residuals are from model trained on full dataset, not 
