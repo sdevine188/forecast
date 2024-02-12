@@ -2,6 +2,7 @@ library(tidyverse)
 library(forecast)
 library(fpp2)
 library(tidymodels)
+library(vars)
 
 
 # forecast package
@@ -195,4 +196,49 @@ sqrt(mean(e^2, na.rm=TRUE))
 
 # compare to regular model residuals
 sqrt(mean(residuals(rwf(goog200, drift=TRUE))^2, na.rm=TRUE))
+
+
+
+#////////////////////////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////////////////////
+
+
+# vector autoregression (VAR)
+
+# vars allow each covariate to influence each other
+# whereas arima covariates you have supply the full covariate vector of values, in VARs the "covariate" values are
+# themselves forecast using the variable-of-interest. the forecasted-covariate values are then used to forecast the 
+# variable-of-interest values
+
+# https://otexts.com/fpp2/VAR.html
+
+uschange[,1:2] %>% as_tibble()
+
+# use VARselect() to find out best number of lags to use
+# note heynmann recommends BIC as best metric (labeled here as SC for schwarz criterion)
+# he says AIC tends toward suggesting too many lags
+# eg the AIC here selects 5 lags, but BIC selects 1
+VARselect(uschange[,1:2], lag.max=8, type="const")
+VARselect(uschange[,1:2], lag.max=8, type="const")[["selection"]]
+
+
+var1 <- VAR(uschange[,1:2], p=1, type="const")
+# as with arima, test that residuals are uncorrelated using portmanteau test (eg no info left in residuals)
+# note that here both models show some remaining correlation (eg information) (the p value < .10)
+serial.test(var1, lags.pt=10, type="PT.asymptotic")
+
+var2 <- VAR(uschange[,1:2], p=2, type="const")
+serial.test(var2, lags.pt=10, type="PT.asymptotic")
+
+# since residuals of models w lags of 1 and 2 both show some remaining correlation (eg info), the
+# next step is to fit model with lag of 3
+# the residuals for this model pass the test for serial correlation
+var3 <- VAR(uschange[,1:2], p=3, type="const")
+serial.test(var3, lags.pt=10, type="PT.asymptotic")
+
+# forecast 
+forecast(var3) %>%
+        autoplot() + xlab("Year")
+
 
