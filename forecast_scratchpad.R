@@ -1,19 +1,434 @@
-library(tidyverse)
 library(forecast)
 library(fpp2)
+# library(fpp3)
 library(tidymodels)
-library(vars)
+# library(vars)
+library(urca)
+library(sweep)
+library(fable)
+library(feasts)
+library(tsibble)
+library(tsibbledata)
+library(tidyverse)
 
+
+
+# fable package is the newer version of forecast package for the tidyverse (aka tidyverts)
+# https://tidyverts.org/
+# https://fable.tidyverts.org/
+# https://otexts.com/fpp3/
+# https://feasts.tidyverts.org/
 
 # forecast package
 # https://otexts.com/fpp2/arima-r.html
-# forecast: regression w arima errors (best): https://otexts.com/fpp2/regarima.html
+# forecast: regression w arima errors aka arimax (best): https://otexts.com/fpp2/regarima.html
+# https://stats.stackexchange.com/questions/192739/applying-an-arima-model-with-exogenous-variables-to-new-data-for-forecasting
 # tidymodels forecast with resampling
 # https://www.tidymodels.org/learn/models/time-series/
-# https://stats.stackexchange.com/questions/192739/applying-an-arima-model-with-exogenous-variables-to-new-data-for-forecasting
 
 
-# forecast change in consumption ####
+#///////////////////////////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////////////////////////
+
+
+# use tsibble ####
+
+# tsibbles are tidyverse-friendly versions of ts objects, so you can use dplyer etc
+y <- tsibble(Year = 2015:2019,
+        Observation = c(123, 39, 78, 52, 110),
+        index = Year)
+y
+y %>% mutate(test = 1) %>% select(Year, test)
+
+
+#///////////////////////////////////////////////////////////////////////////////////////
+
+
+# https://otexts.com/fpp3/arima-r.html
+
+global_economy
+global_economy %>% glimpse()
+global_economy %>% count(Year)
+
+# plot
+global_economy |>
+        filter(Code == "CAF") |>
+        autoplot(Exports) +
+        labs(title="Central African Republic exports",
+             y="% of GDP")
+
+# plot
+global_economy |>
+        filter(Code == "CAF") |>
+        gg_tsdisplay(Exports, plot_type = "partial")
+
+# plot
+global_economy |>
+        filter(Code == "CAF") |>
+        gg_tsdisplay(difference(Exports), plot_type='partial')
+
+
+#///////////////////////
+
+
+# fit models
+caf_fit <- global_economy |>
+        filter(Code == "CAF") |>
+        model(arima210 = ARIMA(Exports ~ pdq(2,1,0)),
+              arima013 = ARIMA(Exports ~ pdq(0,1,3)),
+              stepwise = ARIMA(Exports),
+              search = ARIMA(Exports, stepwise=FALSE))
+
+# inspect
+caf_fit
+caf_fit |> pivot_longer(!Country, names_to = "Model name",
+                        values_to = "Orders")
+
+# full search model has the lowest/best AICc
+caf_fit %>% glance()
+caf_fit %>% glance() |> arrange(AICc) |> select(.model:BIC)
+caf_fit %>% select(search) %>% report()
+caf_fit %>% accuracy()
+
+
+#///////////////////////
+
+
+# check residuals
+# they look like white noise
+caf_fit |>
+        select(search) |>
+        gg_tsresiduals()
+
+# use ljung-box portmanteau test to confirm residuals are like white noise
+# note that augment() conveniently joins original data and forecast var with the fitted values and residuals
+# note that "innovation residuals" are residuals on a transformed scale (if there is a transformed scale)
+# if there's not a transformed scale, the "innovation residuals" and plain-old "residuals" are the same
+
+# the results are not significant (i.e., the p-values are relatively large). 
+# Thus, we can conclude that the residuals are not distinguishable from a white noise series.
+# note that in this tutorial, the add arg dof = 3, but in other tutorials this arg is omitted from ljung-box, 
+# so it seems optional
+augment(caf_fit)
+augment(caf_fit) |>
+        filter(.model=='search') |>
+        features(.var = .innov, features = ljung_box, lag = 10)
+        # features(.var = .innov, features = ljung_box, lag = 10, dof = 3)
+
+
+#///////////////////////
+
+
+# forecast
+caf_fit |>
+        forecast(h=5)
+
+# plot
+caf_fit |>
+        forecast(h=5) |>
+        filter(.model=='search') |>
+        autoplot(global_economy)
+
+#///////////////////////////////////////////////////////////////////////////////////////
+
+
+# regarima (aka arimax) w fable ####
+# https://otexts.com/fpp3/regarima.html
+# https://otexts.com/fpp3/forecasting.html
+
+# Figure 10.1 shows the quarterly changes in personal consumption expenditure and personal disposable 
+# income from 1970 to 2019 Q2. We would like to forecast changes in expenditure based on changes in income. 
+# A change in income does not necessarily translate to an instant change in consumption 
+# (e.g., after the loss of a job, it may take a few months for expenses to be reduced to allow for 
+# the new circumstances). However, we will ignore this complexity in this example and try to measure the 
+# instantaneous effect of the average change of income on the average change of consumption expenditure.
+
+# plot
+us_change |>
+        pivot_longer(c(Consumption, Income),
+                     names_to = "var", values_to = "value") |>
+        ggplot(aes(x = Quarter, y = value)) +
+        geom_line() +
+        facet_grid(vars(var), scales = "free_y") +
+        labs(title = "US consumption and personal income",
+             y = "Quarterly % change")
+
+
+#///////////////////////
+
+
+# fit model
+fit <- us_change |>
+        model(ARIMA(Consumption ~ Income))
+fit
+fit %>% report()
+fit %>% glance()
+fit %>% accuracy()
+
+
+#///////////////////////
+
+
+# inspect residuals
+# the arima residuals should resemble white noise
+bind_rows(
+        `Regression residuals` =
+                as_tibble(residuals(fit, type = "regression")),
+        `ARIMA residuals` =
+                as_tibble(residuals(fit, type = "innovation")),
+        .id = "type"
+) |>
+        mutate(
+                type = factor(type, levels=c(
+                        "Regression residuals", "ARIMA residuals"))
+        ) |>
+        ggplot(aes(x = Quarter, y = .resid)) +
+        geom_line() +
+        facet_grid(vars(type))
+
+fit |> gg_tsresiduals()
+
+# test residuals
+augment(fit) |>
+        features(.innov, ljung_box, dof = 3, lag = 8)
+
+
+#///////////////////////
+
+
+# forecast
+
+# To forecast using a regression model with ARIMA errors, we need to forecast the regression part of the model 
+# and the ARIMA part of the model, and combine the results. As with ordinary regression models, in order 
+# to obtain forecasts we first need to forecast the predictors. When the predictors are known into the future 
+# (e.g., calendar-related variables such as time, day-of-week, etc.), this is straightforward. 
+# But when the predictors are themselves unknown, we must either model them separately, 
+# or use assumed future values for each predictor.
+
+# We will calculate forecasts for the next eight quarters assuming that the 
+# future percentage changes in personal disposable income will be equal to the 
+# mean percentage change from the last forty years.
+
+# The prediction intervals for this model are narrower than if we had fitted an ARIMA model without covariates, 
+# because we are now able to explain some of the variation in the data using the income predictor.
+
+# It is important to realise that the prediction intervals from regression models 
+# (with or without ARIMA errors) do not take into account the uncertainty in the forecasts of the predictors. 
+# So they should be interpreted as being conditional on the assumed (or estimated) future values of the predictor variables.
+
+# get new_data for covariate
+us_change_future <- new_data(us_change, 8) |>
+        mutate(Income = mean(us_change$Income))
+
+# forecast
+forecast(fit, new_data = us_change_future) |>
+        autoplot(us_change) +
+        labs(y = "Percentage change")
+
+
+#///////////////////////////////////////////////////////////////////////////////////////
+
+
+# regarima w fable example: electricity demand ####
+
+# get data
+vic_elec_daily <- vic_elec |>
+        filter(year(Time) == 2014) |>
+        index_by(Date = date(Time)) |>
+        summarise(
+                Demand = sum(Demand) / 1e3,
+                Temperature = max(Temperature),
+                Holiday = any(Holiday)
+        ) |>
+        mutate(Day_Type = case_when(
+                Holiday ~ "Holiday",
+                wday(Date) %in% 2:6 ~ "Weekday",
+                TRUE ~ "Weekend"
+        ))
+vic_elec_daily
+
+# plot
+# see correlation with temperature, which will be used as covariate
+# also see relationship with weekday/weekend/holiday
+vic_elec_daily |>
+        ggplot(aes(x = Temperature, y = Demand, colour = Day_Type)) +
+        geom_point() +
+        labs(y = "Electricity demand (GW)",
+             x = "Maximum daily temperature")
+
+# plot
+vic_elec_daily |>
+        pivot_longer(c(Demand, Temperature)) |>
+        ggplot(aes(x = Date, y = value)) +
+        geom_line() +
+        facet_grid(name ~ ., scales = "free_y") + ylab("")
+
+
+#///////////////////////
+
+
+# fit model
+fit <- vic_elec_daily %>%
+        mutate(temperature_squared = Temperature ^ 2,
+               weekday_flag = case_when(Day_Type == "Weekday" ~ 1, TRUE ~ 0)) %>%
+        model(ARIMA(Demand ~ Temperature + temperature_squared + weekday_flag))
+
+# original version written untidily
+# fit2 <- vic_elec_daily |>
+#         model(ARIMA(Demand ~ Temperature + I(Temperature^2) +
+#                             (Day_Type == "Weekday")))
+
+
+fit
+fit %>% glance()
+fit %>% report() 
+fit %>% accuracy()
+
+# fit2
+# fit2 %>% glance()
+# fit2 %>% report()
+
+
+#///////////////////////
+
+
+# check residuals
+fit |> gg_tsresiduals()
+
+# test residuals
+
+# There is clear heteroscedasticity in the residuals, with higher variance in January and February, 
+# and lower variance in May. The model also has some significant autocorrelation in the residuals, 
+# and the histogram of the residuals shows long tails. All of these issues with the residuals may 
+# affect the coverage of the prediction intervals, but the point forecasts should still be ok.
+
+augment(fit) |>
+        features(.innov, ljung_box, dof = 6, lag = 14)
+
+
+#///////////////////////
+
+
+# forecast
+
+# Using the estimated model we forecast 14 days ahead starting from Thursday 1 January 2015 
+# (a non-work-day being a public holiday for New Years Day). In this case, we could obtain weather forecasts 
+# from the weather bureau for the next 14 days. But for the sake of illustration, we will use scenario based 
+# forecasting (as introduced in Section 7.6) where we set the temperature for the next 14 days to a constant 26 degrees.
+
+# note that we need to use new_data() to append new data to the tsibble, since the model needs future period covariate values
+# new_data will append n additional time periods to the original tsibble
+vic_elec_daily %>% as_tibble() %>% arrange(desc(Date))
+
+# get new_data
+vic_elec_future <- new_data(vic_elec_daily, n = 14) |>
+        mutate(
+                Temperature = 26,
+                Holiday = c(TRUE, rep(FALSE, 13)),
+                Day_Type = case_when(
+                        Holiday ~ "Holiday",
+                        wday(Date) %in% 2:6 ~ "Weekday",
+                        TRUE ~ "Weekend"
+                )
+        )
+vic_elec_future 
+
+# forecast
+vic_elect_forecast <- forecast(object = fit, new_data = vic_elec_future)
+vic_elect_forecast
+
+
+# plot
+vic_elect_forecast %>%
+        autoplot(vic_elec_daily) +
+        labs(title="Daily electricity demand: Victoria",
+             y="GW")
+
+
+#///////////////////////////////////////////////////////////////////////////////////////
+
+
+# time series cross validation w fable ####
+
+# Time series cross-validation accuracy
+# https://otexts.com/fpp3/tscv.html
+# The stretch_tsibble() function is used to create many training sets. 
+# In this example, we start with a training set of length .init=3, and 
+# increase the size of successive training sets by .step=1.
+
+# get data
+google_stock <- gafa_stock |>
+        filter(Symbol == "GOOG", year(Date) >= 2015) |>
+        mutate(day = row_number()) |>
+        update_tsibble(index = day, regular = TRUE)
+# Filter the year of interest
+google_2015 <- google_stock |> filter(year(Date) == 2015)
+
+# stretch_tsibble to get set of extended data series for use in ts CV
+google_2015_tr <- google_2015 |>
+        stretch_tsibble(.init = 3, .step = 1) |>
+        relocate(Date, Symbol, .id)
+
+# inspect
+google_2015_tr %>% print(n = 20)
+
+# TSCV accuracy
+google_2015_tr |>
+        model(RW(Close ~ drift())) |>
+        forecast(h = 1) |>
+        accuracy(google_2015)
+
+# Training set accuracy
+google_2015 |>
+        model(RW(Close ~ drift())) |>
+        accuracy()
+
+
+#///////////////////////////////////////////////////////////////////////////////////
+
+
+# vector autoregressions (VAR) w fable ####
+
+# https://otexts.com/fpp3/VAR.html
+
+
+# fit model
+fit <- us_change |>
+        model(
+                aicc = VAR(vars(Consumption, Income)),
+                bic = VAR(vars(Consumption, Income), ic = "bic")
+        )
+fit
+glance(fit)
+
+
+#////////////////
+
+
+# check residuals
+fit |>
+        augment() |>
+        ACF(.innov) |>
+        autoplot()
+
+
+#/////////////////
+
+
+# plot
+fit |>
+        select(aicc) |>
+        forecast() |>
+        autoplot(us_change |> filter(year(Quarter) > 2010))
+
+
+#//////////////////////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////////////
+
+
+# arima w forecast ####
 
 # get data
 uschange
@@ -32,7 +447,18 @@ uschange[ ,1]
 uschange[ ,1:2]
 
 # plot single time series w ggtsdisplay()
+uschange[ ,1] %>% ggAcf()
+uschange[ ,1] %>% diff() %>% ggAcf()
 uschange[ ,1] %>% ggtsdisplay()
+uschange[ ,1] %>% diff() %>% ggtsdisplay()
+
+# can run kpss unit root test for stationarity
+# note that if test_stat is bigger than 1pct critical value, the data is not stationary
+uschange[ ,1] %>% ur.kpss() %>% summary()
+uschange[ ,1] %>% diff() %>% ur.kpss() %>% summary()
+goog %>% ur.kpss() %>% summary()
+goog %>% diff() %>% ur.kpss() %>% summary()
+
 
 # fit arima predicting consumption, with income as covariate
 fit <- auto.arima(uschange[,"Consumption"], xreg = uschange[,"Income"])
@@ -42,8 +468,14 @@ fit
 # yt = .599(intercept) + .203(income) + arima-t
 # arima-t = .692arimat-1 + et + .576et-1 + .198et-2
 
+# sweep::sw_glance gets tidy model metrics
+fit %>% sw_glance()
+
+# sweep::sw_tidy gets tidy model parameters
+fit %>% sw_tidy()
+
 # check accuracy
-accuracy(fit)
+# accuracy(fit)
 
 # check residuals
 checkresiduals(fit)
@@ -62,7 +494,7 @@ autoplot(fcast) + xlab("Year") + ylab("Percentage change")
 #////////////////////////////////////////////////////////////////////////////////////////
 
 
-# forecast electricity demand w multiple covariates ####
+# arimax w forecast, w multiple covariates ####
 
 # get data
 elecdaily
@@ -104,7 +536,7 @@ autoplot(fcast) + ylab("Electricity demand (GW)")
 #//////////////////////////////////////////////////////////////////////////////////////
 
 
-# use lagged variables as covariates ####
+# arimax with forecast, lagged variables as covariates ####
 
 # get data
 # advertising var is covariate to predict insurance quotes
@@ -174,7 +606,7 @@ autoplot(fc8) + ylab("Quotes") +
 #///////////////////////////////////////////////////////////////////////////////////////
 
 
-# time series cross validation ####
+# time series cross validation w forecast ####
 
 # this takes a series of all one-step-ahead forecasts and returns the error for each prediction
 # note the initial arg specifies how many initial obs to use for building the first model (these then aren't used for CV error)
@@ -204,7 +636,7 @@ sqrt(mean(residuals(rwf(goog200, drift=TRUE))^2, na.rm=TRUE))
 #////////////////////////////////////////////////////////////////////////////////////
 
 
-# vector autoregression (VAR)
+# vector autoregression (VAR) ####
 
 # vars allow each covariate to influence each other
 # whereas arima covariates you have supply the full covariate vector of values, in VARs the "covariate" values are
