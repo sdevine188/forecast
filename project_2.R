@@ -328,6 +328,107 @@ read_docx() %>%
         body_add_img(src = filename, width = 6, height = 6) %>% 
         print(target = "sale_count_single_family_arima_forecast_chart.docx")
 
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# forecast
+sale_count_single_family_arima_forecast_5_years <- sale_count_single_family_arima %>% forecast(h = 60)
+
+# get forecast accuracy
+sale_count_single_family_arima_forecast_5_years
+sale_count_single_family_arima_forecast_5_years %>% accuracy(home_sales_ts)
+
+
+#//////////////////////
+
+
+# plot
+sale_count_single_family_arima_forecast_5_years %>%
+        autoplot(home_sales_ts)
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# get sale_count_single_family_arima_forecast_5_year_line_chart ####
+sale_count_single_family_arima_forecast_5_year_chart <- sale_count_single_family_arima_forecast_5_years %>% 
+        autoplot(home_sales_ts %>% filter(sale_year != 2021)) +
+        # scale_x_continuous(breaks = seq(from = 2007, to = 2022, by = 1)) +
+        scale_y_continuous(labels = label_comma()) +
+        labs(x = NULL, y = "Sales count", 
+             title = "Forecast sales count of single family homes from ARIMA(1,1,4)(0,1,1)[12]") +
+        coord_fixed(ratio = .5 / 1, clip = "off") +
+        theme_bw() +
+        theme(
+                # plot.background = element_rect(fill = "blue"),
+                # plot.background = element_rect(colour = "#DDDDDD", size = .5),
+                plot.margin = unit(c(0, 15, 0, 0), "mm"),
+                plot.caption = element_text(hjust = 0, size = 11, face = "plain", family = "Calibri", 
+                                            color = "#595959", margin = margin(t = 4, r = 0, b = 0, l = 0)),
+                # text = element_text(family = "Calibri", size = 46, face = "plain", color = "#000000"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(color = "#DDDDDD"),
+                # panel.grid.major.y = element_blank(),
+                # panel.border = element_blank(),
+                panel.border = element_rect(color = "#DDDDDD", size = .5),
+                # panel.grid = element_blank(),
+                # line = element_blank(),
+                # rect = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.ticks.x = element_line(size = .5),
+                # axis.ticks.length.y.left = unit(.2, "cm"),
+                axis.ticks.length.x.bottom = unit(.1, "cm"),
+                axis.text.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                           margin = margin(t = 3, r = 0, b = 0, l = 0), angle = 45, hjust = 1),
+                axis.text.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                           margin = margin(t = 0, r = 0, b = 0, l = 0)),
+                axis.line.x.bottom = element_line(color = "#333333"),
+                # axis.line.x.bottom = element_blank(),
+                axis.line.y.left = element_blank(),
+                axis.title.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                            margin = margin(t = 13, r = 0, b = 5, l = 0)),
+                axis.title.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                            margin = margin(t = 0, r = 3, b = 0, l = 5)),
+                # axis.title.y = element_blank(),
+                # axis.text.y = element_blank(),
+                plot.title = element_text(size = 15, face = "plain", hjust = .5, family = "Calibri", color = "#333333", 
+                                          margin = margin(t = 0, r = 0, b = 5, l = 0, unit = "pt")),
+                # legend.position = "bottom",
+                # legend.key.size = unit(2, "mm"), 
+                legend.title = element_text(size = 9, family = "Calibri", face = "plain", color = "#333333"),
+                legend.text = element_text(size = 9, family = "Calibri", margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"), 
+                                           hjust = .5, color = "#333333")
+                # legend.spacing.y = unit(5.5, "cm"),
+                # legend.key = element_rect(size = 5),
+                # legend.key.size = unit(2, 'lines')
+        ) 
+
+# inspect
+sale_count_single_family_arima_forecast_5_year_chart
+
+
+#///////////////////
+
+
+# resize to 190%
+
+# save chart as emf
+filename <- tempfile(fileext = ".emf")
+emf(file = filename)
+print(sale_count_single_family_arima_forecast_5_year_chart)
+dev.off()
+
+# add emf to word doc  
+read_docx() %>% 
+        body_add_img(src = filename, width = 6, height = 6) %>% 
+        print(target = "sale_count_single_family_arima_forecast_5_year_chart.docx")
+
+
 #////////////////////////////////////////////////////////////////////////////////////
 #////////////////////////////////////////////////////////////////////////////////////
 #////////////////////////////////////////////////////////////////////////////////////
@@ -538,10 +639,119 @@ read_docx() %>%
 
 
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-sale_count_single_family_regarima %>% augment()
-sale_count_single_family_regarima_forecast
+# forecast
+
+# get covariates
+sale_count_single_family_regarima_covariates_5_year <- home_sales_ts %>% 
+        filter(sale_year != 2021) %>%
+        new_data(n = 60) %>%
+        mutate(sale_sum_single_family = rep(home_sales_ts %>% 
+                       as_tibble() %>%
+                       filter(sale_year %in% c(2020)) %>%
+                       group_by(sale_month) %>% 
+                       summarize(sale_sum_single_family_mean = mean(sale_sum_single_family)) %>% 
+                       pull(sale_sum_single_family_mean), times = 5))
+sale_count_single_family_regarima_covariates_5_year
+
+# forecast
+sale_count_single_family_regarima_forecast_5_year <- sale_count_single_family_regarima %>% 
+        forecast(h = 60, new_data = sale_count_single_family_regarima_covariates_5_year)
+
+# get forecast accuracy
+sale_count_single_family_regarima_forecast_5_year
+sale_count_single_family_regarima_forecast_5_year %>% accuracy(home_sales_ts)
+
+
+#//////////////////////
+
+
+# plot
+sale_count_single_family_regarima_forecast_5_year %>%
+        autoplot(home_sales_ts)
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# get sale_count_single_family_regarima_forecast_5_year_line_chart ####
+sale_count_single_family_regarima_forecast_5_year_line_chart <- sale_count_single_family_regarima_forecast_5_year %>% 
+        autoplot(home_sales_ts) +
+        # scale_x_continuous(breaks = seq(from = 2007, to = 2022, by = 1)) +
+        scale_y_continuous(labels = label_comma()) +
+        labs(x = NULL, y = "Sales count", 
+             title = "Forecast sales count of single family homes from\nregression on sales value of single family homes\nw/ ARIMA(5,1,0)(1,0,0)[12] errors") +
+        coord_fixed(ratio = .75 / 1, clip = "off") +
+        theme_bw() +
+        theme(
+                # plot.background = element_rect(fill = "blue"),
+                # plot.background = element_rect(colour = "#DDDDDD", size = .5),
+                plot.margin = unit(c(0, 15, 0, 0), "mm"),
+                plot.caption = element_text(hjust = 0, size = 11, face = "plain", family = "Calibri", 
+                                            color = "#595959", margin = margin(t = 4, r = 0, b = 0, l = 0)),
+                # text = element_text(family = "Calibri", size = 46, face = "plain", color = "#000000"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(color = "#DDDDDD"),
+                # panel.grid.major.y = element_blank(),
+                # panel.border = element_blank(),
+                panel.border = element_rect(color = "#DDDDDD", size = .5),
+                # panel.grid = element_blank(),
+                # line = element_blank(),
+                # rect = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.ticks.x = element_line(size = .5),
+                # axis.ticks.length.y.left = unit(.2, "cm"),
+                axis.ticks.length.x.bottom = unit(.1, "cm"),
+                axis.text.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                           margin = margin(t = 3, r = 0, b = 0, l = 0), angle = 45, hjust = 1),
+                axis.text.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                           margin = margin(t = 0, r = 0, b = 0, l = 0)),
+                axis.line.x.bottom = element_line(color = "#333333"),
+                # axis.line.x.bottom = element_blank(),
+                axis.line.y.left = element_blank(),
+                axis.title.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                            margin = margin(t = 13, r = 0, b = 5, l = 0)),
+                axis.title.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                            margin = margin(t = 0, r = 3, b = 0, l = 5)),
+                # axis.title.y = element_blank(),
+                # axis.text.y = element_blank(),
+                plot.title = element_text(size = 15, face = "plain", hjust = .5, family = "Calibri", color = "#333333", 
+                                          margin = margin(t = 0, r = 0, b = 5, l = 0, unit = "pt")),
+                # legend.position = "bottom",
+                # legend.key.size = unit(2, "mm"), 
+                legend.title = element_text(size = 9, family = "Calibri", face = "plain", color = "#333333"),
+                legend.text = element_text(size = 9, family = "Calibri", margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"), 
+                                           hjust = .5, color = "#333333")
+                # legend.spacing.y = unit(5.5, "cm"),
+                # legend.key = element_rect(size = 5),
+                # legend.key.size = unit(2, 'lines')
+        ) 
+
+# inspect
+sale_count_single_family_regarima_forecast_5_year_line_chart
+
+
+#///////////////////
+
+
+# resize to 190%
+
+# save chart as emf
+filename <- tempfile(fileext = ".emf")
+emf(file = filename)
+print(sale_count_single_family_regarima_forecast_5_year_line_chart)
+dev.off()
+
+# add emf to word doc  
+read_docx() %>% 
+        body_add_img(src = filename, width = 6, height = 6) %>% 
+        print(target = "sale_count_single_family_regarima_forecast_5_year_line_chart.docx")
+
+
 
 
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -781,3 +991,334 @@ dev.off()
 read_docx() %>% 
         body_add_img(src = filename, width = 6, height = 6) %>% 
         print(target = "arima_and_regarima_revenue_loss_bar_chart.docx")
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# sale_amount_median_by_town_bar_chart ####
+
+chart_data <- sales %>% 
+        mutate(home_type = case_when(residential_type %in% 
+                                             c("Two Family", "Three Family", "Four Family" ) ~ "Multi Family",
+                                     TRUE ~ residential_type)) %>%
+        filter(!is.na(home_type),
+               sale_year >= 2007 & sale_year <= 2021,
+               sale_amount >= 10000,
+               residential_type == "Single Family",
+               sale_year == 2020) %>%
+        group_by(town) %>%
+        summarize(sale_amount_median = median(sale_amount, na.rm = TRUE),
+                  sale_amount_mean = mean(sale_amount, na.rm = TRUE)) %>%
+        mutate(color_bin = "all_data") %>%
+        arrange(desc(sale_amount_median)) %>%
+        slice(1:20)
+
+# inspect
+chart_data
+chart_data %>% glimpse()
+chart_data %>% count(sale_year)
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+sale_amount_median_by_town_bar_chart <- chart_data %>% 
+        ggplot(data = ., mapping = aes(x = fct_reorder(.f = town, .x = sale_amount_median, .desc = TRUE), 
+                               y = sale_amount_median, fill = color_bin)) + 
+        geom_col(width = .8) +
+        scale_y_continuous(labels = label_dollar()) +
+        scale_fill_manual(values = c("all_data" = "#2474B6"), guide = "none") +
+        labs(x = NULL, y = "Median sale amount", 
+             fill = NULL,
+             title = "Median sale amount for single family homes for 2020 in CT, by top 20 towns") +
+        coord_fixed(ratio = .000005 / 1, clip = "off") +
+        theme_bw() +
+        theme(
+                # plot.background = element_rect(fill = "blue"),
+                # plot.background = element_rect(colour = "#DDDDDD", size = .5),
+                plot.margin = unit(c(0, 15, 0, 0), "mm"),
+                plot.caption = element_text(hjust = 0, size = 11, face = "plain", family = "Calibri", 
+                                            color = "#595959", margin = margin(t = 4, r = 0, b = 0, l = 0)),
+                # text = element_text(family = "Calibri", size = 46, face = "plain", color = "#000000"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(color = "#DDDDDD"),
+                # panel.grid.major.y = element_blank(),
+                # panel.border = element_blank(),
+                panel.border = element_rect(color = "#DDDDDD", size = .5),
+                # panel.grid = element_blank(),
+                # line = element_blank(),
+                # rect = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.ticks.x = element_line(size = .5),
+                # axis.ticks.length.y.left = unit(.2, "cm"),
+                axis.ticks.length.x.bottom = unit(.1, "cm"),
+                axis.text.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                           margin = margin(t = 3, r = 0, b = 0, l = 0), angle = 45, hjust = 1),
+                axis.text.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                           margin = margin(t = 0, r = 0, b = 0, l = 0)),
+                axis.line.x.bottom = element_line(color = "#333333"),
+                # axis.line.x.bottom = element_blank(),
+                axis.line.y.left = element_blank(),
+                axis.title.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                            margin = margin(t = 13, r = 0, b = 5, l = 0)),
+                axis.title.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                            margin = margin(t = 0, r = 3, b = 0, l = 5)),
+                # axis.title.y = element_blank(),
+                # axis.text.y = element_blank(),
+                plot.title = element_text(size = 15, face = "plain", hjust = .5, family = "Calibri", color = "#333333", 
+                                          margin = margin(t = 0, r = 0, b = 5, l = 0, unit = "pt")),
+                # legend.position = "bottom",
+                # legend.key.size = unit(2, "mm"), 
+                legend.title = element_text(size = 9, family = "Calibri", face = "plain", color = "#333333"),
+                legend.text = element_text(size = 9, family = "Calibri", margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"), 
+                                           hjust = .5, color = "#333333")
+                # legend.spacing.y = unit(5.5, "cm"),
+                # legend.key = element_rect(size = 5),
+                # legend.key.size = unit(2, 'lines')
+        ) 
+
+
+# inspect
+sale_amount_median_by_town_bar_chart
+
+
+#///////////////////
+
+
+# resize to 190%
+
+# save chart as emf
+filename <- tempfile(fileext = ".emf")
+emf(file = filename)
+print(sale_amount_median_by_town_bar_chart)
+dev.off()
+
+# add emf to word doc  
+read_docx() %>% 
+        body_add_img(src = filename, width = 6, height = 6) %>% 
+        print(target = "sale_amount_median_by_town_bar_chart.docx")
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# sale_amount_mean_by_town_bar_chart ####
+
+chart_data <- sales %>% 
+        mutate(home_type = case_when(residential_type %in% 
+                                             c("Two Family", "Three Family", "Four Family" ) ~ "Multi Family",
+                                     TRUE ~ residential_type)) %>%
+        filter(!is.na(home_type),
+               sale_year >= 2007 & sale_year <= 2021,
+               sale_amount >= 10000,
+               residential_type == "Single Family",
+               sale_year == 2020) %>%
+        group_by(town) %>%
+        summarize(sale_amount_median = median(sale_amount, na.rm = TRUE),
+                  sale_amount_mean = mean(sale_amount, na.rm = TRUE)) %>%
+        mutate(color_bin = "all_data") %>%
+        arrange(desc(sale_amount_mean)) %>%
+        slice(1:20)
+
+# inspect
+chart_data
+chart_data %>% glimpse()
+chart_data %>% count(sale_year)
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# plot
+sale_amount_mean_by_town_bar_chart <- chart_data %>% 
+        ggplot(data = ., mapping = aes(x = fct_reorder(.f = town, .x = sale_amount_mean, .desc = TRUE), 
+                                       y = sale_amount_mean, fill = color_bin)) + 
+        geom_col(width = .8) +
+        scale_y_continuous(labels = label_dollar()) +
+        scale_fill_manual(values = c("all_data" = "#2474B6"), guide = "none") +
+        labs(x = NULL, y = "Average sale amount", 
+             fill = NULL,
+             title = "Average sale amount for single family homes for 2020 in CT, by top 20 towns") +
+        coord_fixed(ratio = .000004 / 1, clip = "off") +
+        theme_bw() +
+        theme(
+                # plot.background = element_rect(fill = "blue"),
+                # plot.background = element_rect(colour = "#DDDDDD", size = .5),
+                plot.margin = unit(c(0, 15, 0, 0), "mm"),
+                plot.caption = element_text(hjust = 0, size = 11, face = "plain", family = "Calibri", 
+                                            color = "#595959", margin = margin(t = 4, r = 0, b = 0, l = 0)),
+                # text = element_text(family = "Calibri", size = 46, face = "plain", color = "#000000"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(color = "#DDDDDD"),
+                # panel.grid.major.y = element_blank(),
+                # panel.border = element_blank(),
+                panel.border = element_rect(color = "#DDDDDD", size = .5),
+                # panel.grid = element_blank(),
+                # line = element_blank(),
+                # rect = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.ticks.x = element_line(size = .5),
+                # axis.ticks.length.y.left = unit(.2, "cm"),
+                axis.ticks.length.x.bottom = unit(.1, "cm"),
+                axis.text.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                           margin = margin(t = 3, r = 0, b = 0, l = 0), angle = 45, hjust = 1),
+                axis.text.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                           margin = margin(t = 0, r = 0, b = 0, l = 0)),
+                axis.line.x.bottom = element_line(color = "#333333"),
+                # axis.line.x.bottom = element_blank(),
+                axis.line.y.left = element_blank(),
+                axis.title.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                            margin = margin(t = 13, r = 0, b = 5, l = 0)),
+                axis.title.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                            margin = margin(t = 0, r = 3, b = 0, l = 5)),
+                # axis.title.y = element_blank(),
+                # axis.text.y = element_blank(),
+                plot.title = element_text(size = 15, face = "plain", hjust = .5, family = "Calibri", color = "#333333", 
+                                          margin = margin(t = 0, r = 0, b = 5, l = 0, unit = "pt")),
+                # legend.position = "bottom",
+                # legend.key.size = unit(2, "mm"), 
+                legend.title = element_text(size = 9, family = "Calibri", face = "plain", color = "#333333"),
+                legend.text = element_text(size = 9, family = "Calibri", margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"), 
+                                           hjust = .5, color = "#333333")
+                # legend.spacing.y = unit(5.5, "cm"),
+                # legend.key = element_rect(size = 5),
+                # legend.key.size = unit(2, 'lines')
+        ) 
+
+
+# inspect
+sale_amount_mean_by_town_bar_chart
+
+
+#///////////////////
+
+
+# resize to 190%
+
+# save chart as emf
+filename <- tempfile(fileext = ".emf")
+emf(file = filename)
+print(sale_amount_mean_by_town_bar_chart)
+dev.off()
+
+# add emf to word doc  
+read_docx() %>% 
+        body_add_img(src = filename, width = 6, height = 6) %>% 
+        print(target = "sale_amount_mean_by_town_bar_chart.docx")
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# sale_amount_histogram ####
+
+chart_data <- sales %>% 
+        mutate(home_type = case_when(residential_type %in% 
+                                             c("Two Family", "Three Family", "Four Family" ) ~ "Multi Family",
+                                     TRUE ~ residential_type)) %>%
+        filter(!is.na(home_type),
+               sale_year >= 2007 & sale_year <= 2021,
+               sale_amount >= 10000,
+               sale_amount < 1000000,
+               residential_type == "Single Family") %>%
+        mutate(fill_bin = "all_data")
+
+# inspect
+chart_data
+chart_data %>% glimpse()
+chart_data %>% skim(sale_amount)
+chart_data %>% count(sale_year)
+
+
+#/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# plot
+
+sale_amount_histogram <- chart_data %>% 
+        ggplot(data = ., mapping = aes(x = sale_amount, fill = fill_bin)) + 
+        geom_histogram(col = "#CBCBCB") +
+        scale_y_continuous(labels = label_comma()) +
+        scale_fill_manual(values = c("all_data" = "#2474B6"), guide = "none") +
+        labs(x = NULL, y = "Sale amount", 
+             fill = NULL,
+             title = "Distribution of sale amount for single family homes in CT\nfrom 2007-2021") +
+        coord_fixed(ratio = 10 / 1, clip = "off") +
+        theme_bw() +
+        theme(
+                # plot.background = element_rect(fill = "blue"),
+                # plot.background = element_rect(colour = "#DDDDDD", size = .5),
+                plot.margin = unit(c(0, 15, 0, 0), "mm"),
+                plot.caption = element_text(hjust = 0, size = 11, face = "plain", family = "Calibri", 
+                                            color = "#595959", margin = margin(t = 4, r = 0, b = 0, l = 0)),
+                # text = element_text(family = "Calibri", size = 46, face = "plain", color = "#000000"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(color = "#DDDDDD"),
+                # panel.grid.major.y = element_blank(),
+                # panel.border = element_blank(),
+                panel.border = element_rect(color = "#DDDDDD", size = .5),
+                # panel.grid = element_blank(),
+                # line = element_blank(),
+                # rect = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.ticks.x = element_line(size = .5),
+                # axis.ticks.length.y.left = unit(.2, "cm"),
+                axis.ticks.length.x.bottom = unit(.1, "cm"),
+                axis.text.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                           margin = margin(t = 3, r = 0, b = 0, l = 0), angle = 45, hjust = 1),
+                axis.text.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                           margin = margin(t = 0, r = 0, b = 0, l = 0)),
+                axis.line.x.bottom = element_line(color = "#333333"),
+                # axis.line.x.bottom = element_blank(),
+                axis.line.y.left = element_blank(),
+                axis.title.x = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333", 
+                                            margin = margin(t = 13, r = 0, b = 5, l = 0)),
+                axis.title.y = element_text(family = "Calibri", face = "plain", size = 13, color = "#333333",
+                                            margin = margin(t = 0, r = 3, b = 0, l = 5)),
+                # axis.title.y = element_blank(),
+                # axis.text.y = element_blank(),
+                plot.title = element_text(size = 15, face = "plain", hjust = .5, family = "Calibri", color = "#333333", 
+                                          margin = margin(t = 0, r = 0, b = 5, l = 0, unit = "pt")),
+                # legend.position = "bottom",
+                # legend.key.size = unit(2, "mm"), 
+                legend.title = element_text(size = 9, family = "Calibri", face = "plain", color = "#333333"),
+                legend.text = element_text(size = 9, family = "Calibri", margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"), 
+                                           hjust = .5, color = "#333333")
+                # legend.spacing.y = unit(5.5, "cm"),
+                # legend.key = element_rect(size = 5),
+                # legend.key.size = unit(2, 'lines')
+        ) 
+
+
+# inspect
+sale_amount_histogram
+
+
+#///////////////////#///////////////comma_format()////
+
+
+# resize to 190%
+
+# save chart as emf
+filename <- tempfile(fileext = ".emf")
+emf(file = filename)
+print(sale_amount_histogram)
+dev.off()
+
+# add emf to word doc  
+read_docx() %>% 
+        body_add_img(src = filename, width = 6, height = 6) %>% 
+        print(target = "sale_amount_histogram.docx")
+
+
+
